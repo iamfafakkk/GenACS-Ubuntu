@@ -61,6 +61,16 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# Determine service user
+if [ -n "$SUDO_USER" ]; then
+    GENIEACS_USER="$SUDO_USER"
+else
+    GENIEACS_USER=$(whoami)
+fi
+GENIEACS_GROUP=$(id -gn "$GENIEACS_USER")
+
+echo -e "${MAGENTA}Services will run as user: ${BOLD}$GENIEACS_USER${NC}"
+
 # Check Ubuntu version
 if [ "$(lsb_release -cs)" != "jammy" ] && [ "$(lsb_release -cs)" != "noble" ]; then
     echo -e "${RED}This script only supports Ubuntu 22.04 (Jammy) and Ubuntu 24.04 (Noble)${NC}"
@@ -113,9 +123,9 @@ run_command "systemctl enable mongod" "Enabling MongoDB service ($(( ++current_s
 
 run_command "npm list -g genieacs &> /dev/null || npm install -g genieacs@1.2.13" "Installing GenieACS ($(( ++current_step ))/$total_steps)"
 
-run_command "id -u genieacs &>/dev/null || useradd --system --no-create-home --user-group genieacs" "Creating GenieACS user ($(( ++current_step ))/$total_steps)"
+# run_command "id -u genieacs &>/dev/null || useradd --system --no-create-home --user-group genieacs" "Creating GenieACS user ($(( ++current_step ))/$total_steps)"
 
-run_command "mkdir -p /opt/genieacs/ext && chown genieacs:genieacs /opt/genieacs/ext" "Creating GenieACS directories ($(( ++current_step ))/$total_steps)"
+run_command "mkdir -p /opt/genieacs/ext && chown $GENIEACS_USER:$GENIEACS_GROUP /opt/genieacs/ext" "Creating GenieACS directories ($(( ++current_step ))/$total_steps)"
 
 # Create genieacs.env file
 cat << EOF > /opt/genieacs/genieacs.env
@@ -131,9 +141,9 @@ echo -e "${YELLOW}Creating genieacs.env file ($(( ++current_step ))/$total_steps
 
 run_command "node -e \"console.log('GENIEACS_UI_JWT_SECRET=' + require('crypto').randomBytes(128).toString('hex'))\" >> /opt/genieacs/genieacs.env" "Generating JWT secret ($(( ++current_step ))/$total_steps)"
 
-run_command "chown genieacs:genieacs /opt/genieacs/genieacs.env && chmod 600 /opt/genieacs/genieacs.env" "Setting genieacs.env permissions ($(( ++current_step ))/$total_steps)"
+run_command "chown $GENIEACS_USER:$GENIEACS_GROUP /opt/genieacs/genieacs.env && chmod 600 /opt/genieacs/genieacs.env" "Setting genieacs.env permissions ($(( ++current_step ))/$total_steps)"
 
-run_command "mkdir -p /var/log/genieacs && chown genieacs:genieacs /var/log/genieacs" "Creating log directory ($(( ++current_step ))/$total_steps)"
+run_command "mkdir -p /var/log/genieacs && chown $GENIEACS_USER:$GENIEACS_GROUP /var/log/genieacs" "Creating log directory ($(( ++current_step ))/$total_steps)"
 
 # Create systemd service files
 for service in cwmp nbi fs ui; do
@@ -143,7 +153,7 @@ Description=GenieACS $service
 After=network.target
 
 [Service]
-User=genieacs
+User=$GENIEACS_USER
 EnvironmentFile=/opt/genieacs/genieacs.env
 ExecStart=/usr/local/bin/genieacs-$service
 
